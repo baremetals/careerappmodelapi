@@ -3,6 +3,7 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
+from career_app_model.datasets import industry_names
 from career_app_model.recommendation import recommend_roles
 from fastapi import APIRouter, HTTPException
 from fastapi.encoders import jsonable_encoder
@@ -13,7 +14,6 @@ from career_app_model.predict import predict_suitability_scores
 
 from app import __version__, schemas
 from app.config import settings
-
 
 api_router = APIRouter()
 
@@ -35,19 +35,32 @@ async def predict(input_data: schemas.PredictionInputs) -> Any:
     """
     Get user suitability scores for the all industries.
     """
-    get_input_data = input_data.get('inputs')
-    print(get_input_data)
+    logger.info('predicting-------------------------<')
+    get_input_data = input_data.inputs[0]
+    new_input_data = {
+        "userId": get_input_data.profileId,
+        "selectedIndustries": get_input_data.selectedIndustries,
+        "selectedInterests": get_input_data.selectedInterests,
+        "responses": get_input_data.responses
+    }
+    logger.info('I am here')
     # Advanced: You can improve performance of your API by rewriting the
     # `make prediction` function to be async and using await here.
-    logger.info(f"Making prediction on inputs: {input_data.inputs}")
-    results = predict_suitability_scores(input_data=get_input_data)
+    # logger.info(f"Making prediction on inputs: {industry_names.get_industry_names()}")
+    results = predict_suitability_scores(input_data=new_input_data)
+    logger.info('no I got here---------------------------------------<>')
+    # Filtering the predictions
+    all_industries = industry_names.get_industry_names()
+    predicted_scores = results.get('suitability_scores')
+    filtered_predictions = {industry: score for industry, score in zip(all_industries, predicted_scores[0]) if
+                            industry in get_input_data.selectedIndustries}
 
+    # logger.info(f"Filtering names: {filtered_predictions}")
     if results["errors"] is not None:
         logger.warning(f"Prediction validation error: {results.get('errors')}")
         raise HTTPException(status_code=400, detail=json.loads(results["errors"]))
 
-    logger.info(f"Prediction results: {results.get('predictions')}")
-
+    # logger.info(f"Prediction results: {results.get('suitability_scores')}")
     return results
 
 
@@ -57,7 +70,6 @@ def get_job_roles(data: schemas.EmbeddingsRequest):
     # This is where you'll use your existing function to fetch the embeddings and get the closest matching job roles
     job_roles = recommend_roles(industry_data=data.interests)
     return {"job_roles": job_roles}
-
 
 # @app.post("/predict/")
 # def predict_suitability(data: PredictRequest, api_key: str = Depends(get_api_key)):

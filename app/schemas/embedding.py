@@ -3,5 +3,5 @@ from pydantic import BaseModel
 
 
 class EmbeddingsRequest(BaseModel):
-    userId: str
+    profileId: str
     interests: list
