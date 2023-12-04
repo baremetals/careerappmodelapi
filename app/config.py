@@ -23,8 +23,10 @@ class Settings(BaseSettings):
     BACKEND_CORS_ORIGINS: List[AnyHttpUrl] = [
         "http://localhost:3000",  # type: ignore
         "http://localhost:8000",  # type: ignore
+        "http://127.0.0.1:4000",  # type: ignore
         "https://localhost:3000",  # type: ignore
         "https://localhost:8000",  # type: ignore
+        "https://localhost:4000",  # type: ignore
     ]
 
     PROJECT_NAME: str = "Career Suitability API"

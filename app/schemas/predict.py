@@ -1,4 +1,4 @@
-from typing import Any, List, Optional
+from typing import Any, List, Optional, Dict, Union
 
 from pydantic import BaseModel
 from career_app_model.processing.validations import SingleResponseDataInputSchema
@@ -7,7 +7,10 @@ from career_app_model.processing.validations import SingleResponseDataInputSchem
 class PredictionResults(BaseModel):
     errors: Optional[Any]
     version: str
-    suitability_scores: Optional[List[List[float]]]
+    selected_industries_scores: Optional[List[Dict]]
+    # suitability_scores: Optional[List[List[float]]]
+    suitability_scores: Optional[List[Dict]]
+    # suitability_scores: Optional[List[Dict[str, Union[str, float]]]]
 
 
 class PredictionInputs(BaseModel):
