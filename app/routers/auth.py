@@ -1,84 +1,57 @@
-from datetime import timedelta, datetime
-from typing import Annotated, Union
-from fastapi import APIRouter, Depends, HTTPException
+from typing import Annotated
+from fastapi import APIRouter, Depends, BackgroundTasks, Header
 from sqlalchemy.orm import Session
 from starlette import status
-
-from app.database import get_db
-from app.schemas.auth import CreateUserRequest, Token
-from passlib.context import CryptContext
-from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer
-from app.models import User
-from jose import jwt, JWTError
+from fastapi.responses import JSONResponse
+from app.config.database import get_db
+from app.config.guards import oauth2_bearer, get_current_user
+from app.responses.user_responses import UserResponse, LoginResponse
+from app.schemas.auth import CreateUserRequest, Token, UserVerificationRequest, EmailRequest, ResetRequest
+from fastapi.security import OAuth2PasswordRequestForm
+from app.services import auth
 
 router = APIRouter(
     prefix='/auth',
-    tags=['auth']
+    tags=['auth'],
+    responses={404: {"description": "Not found"}},
+    dependencies=[Depends(oauth2_bearer), Depends(get_current_user)]
 )
-SECRET_KEY = 'SECRET KEY'
-ALGORITHM = 'HS256'
-bcrypt_context = CryptContext(schemas=['bcrypt'], deprecated='auto')
-oauth2_bearer = OAuth2PasswordBearer(tokenUrl='auth/token')
+
 
 db_dependency = Annotated[Session, Depends(get_db)]
 
 
-def authenticate_user(username: str, password: str, db) -> Union[User, bool]:
-    user = db.query(User).filter(User.email == username).first()
-    if not user:
-        return False
-    if not bcrypt_context.verify(password, user.hashed_password):
-        return False
-    return user
+@router.post("/", status_code=status.HTTP_201_CREATED, response_model=UserResponse)
+async def register_user(data: CreateUserRequest, background_tasks: BackgroundTasks, db: db_dependency):
+    return await auth.create_new_user(data, db, background_tasks)
 
 
-def create_access_token(email: str, user_id: int, user_role: str, expires_delta: timedelta) -> str:
-    encode = {'sub': email, 'id': user_id, 'role': user_role}
-    expires = datetime.utcnow() + expires_delta
-    encode.update({'exp': expires})
-    return jwt.encode(encode, SECRET_KEY, algorithm=ALGORITHM)
+@router.post("/verify", status_code=status.HTTP_200_OK)
+async def verify_user_account(data: UserVerificationRequest, background_tasks: BackgroundTasks,
+                              db: db_dependency):
+    await auth.verify_user_account(data, db, background_tasks)
+    return JSONResponse({"message": "Account is activated successfully."})
 
 
-async def get_current_user(token: Annotated[str, Depends(oauth2_bearer)]):
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        email: str = payload.get('sub')
-        user_id: int = payload.get('id')
-        user_role: str = payload.get('role')
-        if email is None or user_id is None:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
-                                detail='Could not validate user')
-        return {'email': email, 'id': user_id, 'role': user_role}
-    except JWTError:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
-                            detail='Could not validate user')
+@router.post("/login", response_model=LoginResponse)
+async def login_user(data: Annotated[OAuth2PasswordRequestForm, Depends()],
+                     db: db_dependency):
+    return await auth.get_login_token(data, db)
 
 
-@router.post("/", status_code=status.HTTP_201_CREATED)
-async def create_user(create_user_request: CreateUserRequest, db: db_dependency):
-    create_user_model = User(
-        email=create_user_request.email,
-        first_name=create_user_request.first_name,
-        last_name=create_user_request.last_name,
-        hashed_password=bcrypt_context.hash(create_user_request.password),
-        company_name=create_user_request.company_name,
-        user_status='active',
-        user_role='user',
-    )
-    db.add(create_user_model)
-    db.commit()
+@router.post("/refresh", status_code=status.HTTP_200_OK, response_model=LoginResponse)
+async def refresh_token(db: db_dependency, token=Header()):
+    return await auth.get_refresh_token(token, db)
 
 
-@router.post("/token", response_model=Token)
-async def login_for_access_token(form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
-                                 db: db_dependency):
-    user = authenticate_user(form_data.username, form_data.password, db)
-    if not user:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
-                            detail='Could not validate user')
-    token = create_access_token(user.email, user.id, user.role, timedelta(minutes=20))
+@router.post("/forgot-password", response_model=Token)
+async def forgot_password(data: EmailRequest, background_tasks: BackgroundTasks,
+                          db: db_dependency):
+    await auth.send_forgot_password_link(data, background_tasks, db)
+    return JSONResponse({"message": "A email with password reset link has been sent to you."})
 
-    return {
-        'access_token': token,
-        'token_type': 'bearer'
-    }
+
+@router.post("/reset-password", response_model=Token)
+async def reset_password(data: ResetRequest, background_tasks: BackgroundTasks, db: db_dependency):
+    await auth.reset_user_password(data, db, background_tasks)
+    return JSONResponse({"message": "Your password has been updated."})

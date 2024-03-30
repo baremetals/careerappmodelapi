@@ -19,3 +19,6 @@ taskkill /F /PID 924
 
 create secret key
 openssl rand -hex 32
+
+create requirements.txt file
+pip freeze > requirements.txt

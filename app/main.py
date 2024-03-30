@@ -1,10 +1,15 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
+from starlette.responses import PlainTextResponse
 from app.routers import career, root, auth, admin, users
-from app.config import settings, setup_app_logging
-import models
-from database import engine
+from app.config.settings import settings, setup_app_logging
+import app.models.user as models
+from app.config.database import engine
+from sqlalchemy.orm import Session
+from typing import Annotated
+from app.config.database import get_db
+from slowapi.errors import RateLimitExceeded
 
 # setup logging as early as possible
 setup_app_logging(config=settings)
@@ -12,23 +17,13 @@ setup_app_logging(config=settings)
 app = FastAPI(
     title=settings.PROJECT_NAME, openapi_url=f"{settings.API_V1_STR}/openapi.json"
 )
-
 models.Base.metadata.create_all(bind=engine)
+db_dependency = Annotated[Session, Depends(get_db)]
 
-# @app.middleware("http")
-# async def log_request_headers(request: Request, call_next):
-#     print("Middleware executed")
-#     headers = request.headers
-#     logger.info(f"Request headers: {headers}")
-#
-#     response = await call_next(request)
-#     return response
 
-app.include_router(root.router)
-app.include_router(auth.router, prefix=settings.API_V1_STR)
-app.include_router(admin.router, prefix=settings.API_V1_STR)
-app.include_router(users.router, prefix=settings.API_V1_STR)
-app.include_router(career.router, prefix=settings.API_V1_STR)
+@app.exception_handler(RateLimitExceeded)
+async def rate_limit_exceeded_handler(exc: RateLimitExceeded):
+    return PlainTextResponse(str(exc.detail), status_code=exc.status_code)
 
 
 # Set all CORS enabled origins
@@ -41,6 +36,23 @@ if settings.BACKEND_CORS_ORIGINS:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+
+@app.middleware("http")
+async def log_request_headers(request: Request, call_next):
+    print("Middleware executed")
+    headers = request.headers
+    logger.info(f"Request headers: {headers}")
+
+    response = await call_next(request)
+    return response
+
+
+app.include_router(root.router)
+app.include_router(auth.router, prefix=settings.API_V1_STR)
+app.include_router(admin.router, prefix=settings.API_V1_STR)
+app.include_router(users.router, prefix=settings.API_V1_STR)
+app.include_router(career.router, prefix=settings.API_V1_STR)
 
 if __name__ == "__main__":
     # Use this for debugging purposes only

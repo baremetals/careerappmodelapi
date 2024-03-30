@@ -4,7 +4,7 @@ from fastapi.responses import HTMLResponse
 from career_app_model import __version__ as app_model_version
 
 from app import __version__, schemas
-from app.config import settings
+from app.config.settings import settings
 
 router = APIRouter()
 

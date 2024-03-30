@@ -1,16 +1,11 @@
-from datetime import timedelta, datetime
-from typing import Annotated, Union
+from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from starlette import status
 
-from app.database import get_db
-from app.routers.auth import get_current_user
-from app.schemas.auth import CreateUserRequest, Token
-from passlib.context import CryptContext
-from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer
-from app.models import User
-from jose import jwt, JWTError
+from app.config.database import get_db
+from app.config.guards import get_current_user
+from app.models.user import User
 
 router = APIRouter(
     prefix='/admin',

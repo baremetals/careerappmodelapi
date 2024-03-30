@@ -1,4 +1,4 @@
-from typing import Any, List, Optional, Dict, Union
+from typing import Any, List, Optional, Dict
 
 from pydantic import BaseModel
 from career_app_model.processing.validations import SingleResponseDataInputSchema

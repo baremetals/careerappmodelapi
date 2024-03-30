@@ -1,16 +1,16 @@
-from typing import Any, List, Optional, Dict, Union
+from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, EmailStr, Field
 
 
 class CreateUserRequest(BaseModel):
-    email: str
+    email: EmailStr
     first_name: str
     last_name: str
     password: str
     company_name: str
-    user_status: str
-    user_role: str
+    user_status: Optional[str] = 'active'
+    user_role: Optional[str] = 'user'
 
 
 class Token(BaseModel):
@@ -18,6 +18,21 @@ class Token(BaseModel):
     token_type: str
 
 
-class UserVerification(BaseModel):
+class ChangePasswordRequest(BaseModel):
     password: str
     new_password: str = Field(min_length=6)
+
+
+class UserVerificationRequest(BaseModel):
+    token: str
+    email: EmailStr
+
+
+class EmailRequest(BaseModel):
+    email: EmailStr
+
+
+class ResetRequest(BaseModel):
+    token: str
+    email: EmailStr
+    password: str

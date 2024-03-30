@@ -1,47 +1,53 @@
-from datetime import timedelta, datetime
-from typing import Annotated, Union
-from fastapi import APIRouter, Depends, HTTPException
+from typing import Annotated
+from fastapi import APIRouter, Depends, BackgroundTasks
 from sqlalchemy.orm import Session
 from starlette import status
-
-from app.database import get_db
-from app.routers.auth import get_current_user
-from app.schemas.auth import CreateUserRequest, Token, UserVerification
+from app.config.database import get_db
+from app.config.guards import get_current_user
+from app.responses.user_responses import UserResponse, CreateAPKeyResponse, FetchAPKeysResponse
+from app.schemas.auth import ChangePasswordRequest
 from passlib.context import CryptContext
-from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer
-from app.models import User
-
+from app.services import user as user_service
 
 router = APIRouter(
     prefix='/user',
-    tags=['user']
+    tags=['user'],
+    responses={404: {"description": "Not found"}},
 )
 
-bcrypt_context = CryptContext(schemas=['bcrypt'], deprecated='auto')
+bcrypt_context = CryptContext(schemes=['bcrypt'], deprecated='auto')
 
 db_dependency = Annotated[Session, Depends(get_db)]
 user_dependency = Annotated[dict, Depends(get_current_user)]
 
 
 @router.get("/me", status_code=status.HTTP_200_OK)
-async def get_user(user: user_dependency, db: db_dependency):
-    if user is None or user.get('user_role'):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
-                            detail='Authentication Failed')
-    return db.get(User, user.get('user_id'))
+async def get_user(user: user_dependency):
+    return user
 
 
-@router.put("/password", status_code=status.HTTP_204_NO_CONTENT)
-async def change_password(user: user_dependency, db: db_dependency,
-                          user_verification: UserVerification):
+@router.get("/{user_id}", status_code=status.HTTP_200_OK, response_model=UserResponse)
+async def get_user_info(user_id, db: db_dependency):
+    return await user_service.fetch_user_detail(user_id, db)
 
-    if user is None or user.get('user_role'):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
-                            detail='Authentication Failed')
-    user_model = db.get(User, user.get('user_id'))
-    if not bcrypt_context.verify(user_verification.password, user_model.hashed_password):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
-                            detail='Incorrect details provided')
-    user_model.hashed_password = bcrypt_context.hash(user_verification.new_password)
-    db.add(user_model)
-    db.commit()
+
+@router.put("/change-password", status_code=status.HTTP_204_NO_CONTENT)
+async def change_password_request(user: user_dependency, db: db_dependency,
+                                  user_verification: ChangePasswordRequest, background_tasks: BackgroundTasks):
+    return await user_service.change_user_password(user, db, user_verification, background_tasks)
+
+
+@router.get("/generate-api-key", status_code=status.HTTP_201_CREATED,
+            response_model=CreateAPKeyResponse)
+async def create_api_key(user: user_dependency, db: db_dependency):
+    return await user_service.create_user_api_key(user, db)
+
+
+@router.get("/revoke-api-key/{key_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def revoke_api_key(key_id, user: user_dependency, db: db_dependency):
+    return await user_service.revoke_user_api_key(key_id, user, db)
+
+
+@router.get("/api-keys", status_code=status.HTTP_201_CREATED, response_model=FetchAPKeysResponse)
+async def fetch_api_key(user: user_dependency, db: db_dependency):
+    return await user_service.fetch_active_api_keys(user, db)
